@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNA Insight Dashboard</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body { background-color: #f4f7f6; }
+        .hero-section { background: linear-gradient(135deg, #2c3e50, #3498db); color: white; border-radius: 12px; }
+        .dataTables_filter input { border-radius: 20px; padding-left: 15px; }
+        .badge-custom { font-size: 0.9em; padding: 0.5em 0.7em; }
+        .table-hover tbody tr:hover { background-color: #f1f5f9; }
+        .snp-link:hover { color: #1a5276 !important; text-decoration: underline !important; }
+        
+        /* Custom Toggle Colors */
+        #filterClinvar:checked { background-color: #3498db; border-color: #3498db; }
+        #filterNoData:checked { background-color: #e67e22; border-color: #e67e22; }
+    </style>
+</head>
+<body>
+
+<div class="container py-5">
+    
+    <div class="hero-section p-4 mb-4 shadow-sm d-flex justify-content-between align-items-center">
+        <div>
+            <h2 class="mb-1"><i class="fa-solid fa-dna me-2"></i> Genomic Cross-Reference</h2>
+            <p class="mb-0 opacity-75">Personalized SNP matching and trait analysis.</p>
+        </div>
+        <div class="text-end">
+            {% set high_impact = report_data | selectattr('Magnitude', 'string') | map(attribute='Magnitude') | map('float') | select('>', 2.0) | list | length %}
+            <div class="d-inline-block text-center me-4">
+                <h3 class="mb-0">{{ report_data|length }}</h3>
+                <small class="text-uppercase opacity-75" style="letter-spacing: 1px; font-size: 0.75rem;">Total Matches</small>
+            </div>
+            <div class="d-inline-block text-center">
+                <h3 class="mb-0 text-warning">{{ high_impact }}</h3>
+                <small class="text-uppercase opacity-75" style="letter-spacing: 1px; font-size: 0.75rem;">High Impact (>2)</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 rounded-3">
+        <div class="card-body p-4">
+            
+            <div class="d-flex justify-content-between align-items-end border-bottom pb-3 mb-3 flex-wrap gap-3">
+                <h5 class="mb-0 text-muted"><i class="fa-solid fa-filter fa-sm me-2"></i>Data Explorer</h5>
+                
+                <div class="d-flex gap-4">
+                    <div class="form-check form-switch fs-6">
+                        <input class="form-check-input shadow-none" type="checkbox" role="switch" id="filterClinvar" checked>
+                        <label class="form-check-label text-muted" for="filterClinvar" style="user-select: none; cursor: pointer;">
+                            Hide "Common in ClinVar"
+                        </label>
+                    </div>
+                    
+                    <div class="form-check form-switch fs-6">
+                        <input class="form-check-input shadow-none" type="checkbox" role="switch" id="filterNoData" checked>
+                        <label class="form-check-label text-muted" for="filterNoData" style="user-select: none; cursor: pointer;">
+                            Hide Empty Traits
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="table-responsive">
+                <table id="snpTable" class="table table-hover align-middle mb-0" style="width:100%">
+                    <thead class="table-light">
+                        <tr>
+                            <th>SNP</th>
+                            <th>Gene (Chr)</th>
+                            <th>Your Genotype</th>
+                            <th>Magnitude</th>
+                            <th>Trait / Summary</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in report_data %}
+                        <tr>
+                            <td>
+                                <a href="https://www.snpedia.com/index.php/{{ item.SNP }}" target="_blank" class="text-primary text-decoration-none fw-bold snp-link text-nowrap" title="Read more on SNPedia">
+                                    {{ item.SNP }} <i class="fa-solid fa-arrow-up-right-from-square fa-xs ms-1 opacity-75"></i>
+                                </a>
+                                <br>
+                                <small class="text-muted"><i class="fa-solid fa-arrow-right-arrow-left fa-xs me-1"></i> {{ item.Orientation|title }} strand</small>
+                            </td>
+                            
+                            <td>
+                                <span class="fw-bold text-dark">{{ item.Gene }}</span><br>
+                                <span class="badge bg-secondary rounded-pill" style="font-size: 0.75em;">Chr {{ item.Chromosome }}</span>
+                            </td>
+                            
+                            <td>
+                                <span class="badge bg-dark badge-custom">{{ item.Original_Allele }}</span>
+                                {% if item.Original_Allele != item.Processed_Allele %}
+                                    <div class="mt-1">
+                                        <small class="text-muted" title="Flipped to match the minus strand database orientation.">
+                                            <i class="fa-solid fa-code-branch fa-xs text-info"></i> {{ item.Processed_Allele }}
+                                        </small>
+                                    </div>
+                                {% endif %}
+                            </td>
+                            
+                            <td data-sort="{{ item.Magnitude or 0 }}">
+                                {% if item.Magnitude|float > 2 %}
+                                    <span class="badge bg-danger badge-custom shadow-sm"><i class="fa-solid fa-triangle-exclamation me-1"></i> {{ item.Magnitude }}</span>
+                                {% elif item.Magnitude|float > 0 %}
+                                    <span class="badge bg-warning text-dark badge-custom shadow-sm">{{ item.Magnitude }}</span>
+                                {% else %}
+                                    <span class="badge border border-secondary text-secondary badge-custom bg-transparent">{{ item.Magnitude or '0' }}</span>
+                                {% endif %}
+                            </td>
+                            
+                            <td class="text-wrap" style="max-width: 400px; line-height: 1.4;">
+                                {% if item.Summary and item.Summary != "No general summary available." %}
+                                    {{ item.Summary }}
+                                {% else %}
+                                    <span class="text-muted fst-italic">No specific trait data recorded.</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+    $(document).ready(function() {
+        
+        // 1. Define the Custom Filters
+        $.fn.dataTable.ext.search.push(
+            function(settings, data, dataIndex) {
+                let hideClinvar = $('#filterClinvar').is(':checked');
+                let hideNoData = $('#filterNoData').is(':checked');
+                
+                // The Trait/Summary is the 5th column (index 4)
+                let summaryText = data[4].toLowerCase(); 
+                
+                if (hideClinvar && summaryText.includes("common in clinvar")) {
+                    return false; 
+                }
+                
+                if (hideNoData && summaryText.includes("no specific trait data recorded")) {
+                    return false;
+                }
+                
+                return true; 
+            }
+        );
+
+        // 2. Initialize the Table
+        var table = $('#snpTable').DataTable({
+            order: [[ 3, "desc" ]], // 3 is the Magnitude column index
+            pageLength: 25,
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+            language: {
+                search: "",
+                searchPlaceholder: "Search genes, SNPs, or traits...",
+                lengthMenu: "Show _MENU_ rows"
+            },
+            dom: "<'row mb-3'<'col-md-6'l><'col-md-6 d-flex justify-content-end'f>>" +
+                 "<'row'<'col-sm-12'tr>>" +
+                 "<'row mt-3'<'col-md-5'i><'col-md-7'p>>"
+        });
+
+        // 3. Listen for clicks on BOTH toggle switches to instantly redraw the table
+        $('#filterClinvar, #filterNoData').on('change', function() {
+            table.draw();
+        });
+    });
+</script>
+
+</body>
+</html>
