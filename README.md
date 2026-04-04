@@ -118,6 +118,3 @@ Converts line-delimited JSON to a standard JSON array format.
 ## License
 
 GNU General Public License v3.0 - See [LICENSE](LICENSE) for details
-
-## Example
-![Example of App](https://github.com/mentatpsi/OSGenome2/blob/main/Screenshots/OSGenome2.png)
