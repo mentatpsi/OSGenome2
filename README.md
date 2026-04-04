@@ -113,7 +113,7 @@ Converts line-delimited JSON to a standard JSON array format.
 - The crawler includes a 1-second delay between API requests to be respectful to SNPedia
 - User alleles are automatically flipped if the SNP uses the minus strand orientation
 - Magnitude values > 2.0 are highlighted as high-impact variants
-- All data is processed locally; no personal data is sent to external servers beyond SNPedia API queries
+- All data is processed locally; no personal data is sent to external servers.
 
 ## License
 
