@@ -41,7 +41,7 @@ pip install flask
 Use `GenomeImporter.py` to convert your raw 23AndMe DNA text file into the required SNP dictionary format.
 
 ```bash
-python GenomeImporter.py -i <path_to_23andme_file.txt> -o snpDict.json
+python GenomeImporter.py -f <path_to_23andme_file.txt> -o snpDict.json
 ```
 
 **What happens:**
