@@ -36,11 +36,21 @@ pip install flask
 
 ## How to Use the Crawler
 
-### Step 1: Prepare Your SNP Data
+### Step 1: Import Your 23AndMe Raw Data
 
-Export your genetic data from 23AndMe in JSON format and save it as `snpDict.json` in the project root directory. Use OSGenome classic to construct this file.
+Use `GenomeImporter.py` to convert your raw 23AndMe DNA text file into the required SNP dictionary format.
 
-**Expected format:**
+```bash
+python GenomeImporter.py -f <path_to_23andme_file.txt> -o snpDict.json
+```
+
+**What happens:**
+1. Reads your raw 23AndMe text file line-by-line
+2. Extracts SNP IDs (rsids) and genotypes
+3. Formats genotypes to SNPedia standard: `(A;G)` syntax
+4. Exports the processed data to `snpDict.json`
+
+**Expected output format:**
 ```json
 {
   "rs53576": "(A;G)",
