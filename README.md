@@ -13,7 +13,7 @@ OSGenome2/
 ├── app.py                 # Flask application & SNP cross-referencing logic
 ├── crawler.py             # SNPedia web crawler
 ├── GenomeImporter.py      # 23AndMe Genome Importer
-├── snpDict.json          # Your 23AndMe SNP data (user-provided)
+├── snpDict.json          # Your 23AndMe SNP data (Genome Importer Generated)
 ├── detailed_snps.json    # Crawler output (JSONL format)
 ├── final_snps_array.json # Converted JSON array format
 ├── templates/
