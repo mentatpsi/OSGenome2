@@ -12,7 +12,7 @@ OSGenome2 is a Flask-based web application that cross-references your personal S
 OSGenome2/
 ├── app.py                 # Flask application & SNP cross-referencing logic
 ├── crawler.py             # SNPedia web crawler
-├── GenomeImporter.py      # SNPedia Genome Importer
+├── GenomeImporter.py      # 23AndMe Genome Importer
 ├── snpDict.json          # Your 23AndMe SNP data (user-provided)
 ├── detailed_snps.json    # Crawler output (JSONL format)
 ├── final_snps_array.json # Converted JSON array format
