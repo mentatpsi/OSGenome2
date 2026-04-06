@@ -126,6 +126,9 @@ Converts line-delimited JSON to a standard JSON array format.
 - Magnitude values > 2.0 are highlighted as high-impact variants
 - All data is processed locally; no personal data is sent to external servers.
 
+## Disclaimer
+Raw Data coming from Genetic tests done by Direct To Consumer companies such as 23andMe and Ancestry.com were found to have a false positive rate of 40% for genes with clinical significance in a March 2018 study [*False-positive results released by direct-to-consumer genetic tests highlight the importance of clinical confirmation testing for appropriate patient care*](https://www.nature.com/articles/gim201838). For this reason, it's important to confirm any at risk clinical SNPs with your doctor who can provide genetic tests and send them to a clinical laboratory.
+
 ## License
 
 GNU General Public License v3.0 - See [LICENSE](LICENSE) for details

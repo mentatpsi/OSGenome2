@@ -22,7 +22,7 @@ def format_user_allele(allele_string, orientation):
 
     # Flip the bases if the orientation is minus
     if orientation.strip().lower() == 'minus':
-        complement_map = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C', 'I': 'D', 'D': 'I', '-': '-'}
+        complement_map = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C', '-': '-'}
         alleles = [complement_map.get(a, a) for a in alleles]
         
     # Alphabetize the alleles (e.g., T,C becomes C,T)
