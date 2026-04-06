@@ -17,7 +17,6 @@
         .table-hover tbody tr:hover { background-color: #f1f5f9; }
         .snp-link:hover { color: #1a5276 !important; text-decoration: underline !important; }
         
-        /* Custom Toggle Colors */
         #filterClinvar:checked { background-color: #3498db; border-color: #3498db; }
         #filterNoData:checked { background-color: #e67e22; border-color: #e67e22; }
     </style>
@@ -78,54 +77,7 @@
                             <th>Trait / Summary</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for item in report_data %}
-                        <tr>
-                            <td>
-                                <a href="https://www.snpedia.com/index.php/{{ item.SNP }}" target="_blank" class="text-primary text-decoration-none fw-bold snp-link text-nowrap" title="Read more on SNPedia">
-                                    {{ item.SNP }} <i class="fa-solid fa-arrow-up-right-from-square fa-xs ms-1 opacity-75"></i>
-                                </a>
-                                <br>
-                                <small class="text-muted"><i class="fa-solid fa-arrow-right-arrow-left fa-xs me-1"></i> {{ item.Orientation|title }} strand</small>
-                            </td>
-                            
-                            <td>
-                                <span class="fw-bold text-dark">{{ item.Gene }}</span><br>
-                                <span class="badge bg-secondary rounded-pill" style="font-size: 0.75em;">Chr {{ item.Chromosome }}</span>
-                            </td>
-                            
-                            <td>
-                                <span class="badge bg-dark badge-custom">{{ item.Original_Allele }}</span>
-                                {% if item.Original_Allele != item.Processed_Allele %}
-                                    <div class="mt-1">
-                                        <small class="text-muted" title="Flipped to match the minus strand database orientation.">
-                                            <i class="fa-solid fa-code-branch fa-xs text-info"></i> {{ item.Processed_Allele }}
-                                        </small>
-                                    </div>
-                                {% endif %}
-                            </td>
-                            
-                            <td data-sort="{{ item.Magnitude or 0 }}">
-                                {% if item.Magnitude|float > 2 %}
-                                    <span class="badge bg-danger badge-custom shadow-sm"><i class="fa-solid fa-triangle-exclamation me-1"></i> {{ item.Magnitude }}</span>
-                                {% elif item.Magnitude|float > 0 %}
-                                    <span class="badge bg-warning text-dark badge-custom shadow-sm">{{ item.Magnitude }}</span>
-                                {% else %}
-                                    <span class="badge border border-secondary text-secondary badge-custom bg-transparent">{{ item.Magnitude or '0' }}</span>
-                                {% endif %}
-                            </td>
-                            
-                            <td class="text-wrap" style="max-width: 400px; line-height: 1.4;">
-                                {% if item.Summary and item.Summary != "No general summary available." %}
-                                    {{ item.Summary }}
-                                {% else %}
-                                    <span class="text-muted fst-italic">No specific trait data recorded.</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                    </table>
             </div>
 
         </div>
@@ -138,22 +90,25 @@
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 
 <script>
+    // Safely inject the Python data array directly into JavaScript
+    const tableData = {{ report_data | tojson }};
+
     $(document).ready(function() {
         
-        // 1. Define the Custom Filters
+        // 1. Redefine Custom Filters to read from the JSON object instead of the HTML
         $.fn.dataTable.ext.search.push(
-            function(settings, data, dataIndex) {
+            function(settings, searchData, index, rowData, counter) {
                 let hideClinvar = $('#filterClinvar').is(':checked');
                 let hideNoData = $('#filterNoData').is(':checked');
                 
-                // The Trait/Summary is the 5th column (index 4)
-                let summaryText = data[4].toLowerCase(); 
+                let summaryText = (rowData.Summary || "").toLowerCase();
                 
                 if (hideClinvar && summaryText.includes("common in clinvar")) {
                     return false; 
                 }
                 
-                if (hideNoData && summaryText.includes("no specific trait data recorded")) {
+                // Check if it's empty or explicitly says "No general summary available."
+                if (hideNoData && (!rowData.Summary || rowData.Summary === "No general summary available.")) {
                     return false;
                 }
                 
@@ -161,9 +116,11 @@
             }
         );
 
-        // 2. Initialize the Table
+        // 2. Initialize Table with deferred rendering
         var table = $('#snpTable').DataTable({
-            order: [[ 3, "desc" ]], // 3 is the Magnitude column index
+            data: tableData,             // Feed the raw JSON data
+            deferRender: true,           // <--- THIS IS THE MAGIC BULLET FOR SPEED
+            order: [[ 3, "desc" ]],
             pageLength: 25,
             lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
             language: {
@@ -173,10 +130,79 @@
             },
             dom: "<'row mb-3'<'col-md-6'l><'col-md-6 d-flex justify-content-end'f>>" +
                  "<'row'<'col-sm-12'tr>>" +
-                 "<'row mt-3'<'col-md-5'i><'col-md-7'p>>"
+                 "<'row mt-3'<'col-md-5'i><'col-md-7'p>>",
+            
+            // 3. Tell DataTables how to format the raw JSON into HTML for each column
+            columns: [
+                {
+                    data: 'SNP',
+                    render: function (data, type, row) {
+                        let orientation = row.Orientation.charAt(0).toUpperCase() + row.Orientation.slice(1);
+                        return `
+                            <a href="https://www.snpedia.com/index.php/${data}" target="_blank" class="text-primary text-decoration-none fw-bold snp-link text-nowrap" title="Read more on SNPedia">
+                                ${data} <i class="fa-solid fa-arrow-up-right-from-square fa-xs ms-1 opacity-75"></i>
+                            </a>
+                            <br><small class="text-muted"><i class="fa-solid fa-arrow-right-arrow-left fa-xs me-1"></i> ${orientation} strand</small>`;
+                    }
+                },
+                {
+                    data: 'Gene',
+                    render: function (data, type, row) {
+                        return `
+                            <span class="fw-bold text-dark">${data}</span><br>
+                            <span class="badge bg-secondary rounded-pill" style="font-size: 0.75em;">Chr ${row.Chromosome}</span>`;
+                    }
+                },
+                {
+                    data: 'Original_Allele',
+                    render: function (data, type, row) {
+                        let html = `<span class="badge bg-dark badge-custom">${data}</span>`;
+                        if (data !== row.Processed_Allele) {
+                            html += `
+                                <div class="mt-1">
+                                    <small class="text-muted" title="Flipped to match the minus strand database orientation.">
+                                        <i class="fa-solid fa-code-branch fa-xs text-info"></i> ${row.Processed_Allele}
+                                    </small>
+                                </div>`;
+                        }
+                        return html;
+                    }
+                },
+                {
+                    data: 'Magnitude',
+                    render: function (data, type, row) {
+                        let mag = parseFloat(data) || 0;
+                        
+                        // If DataTables is sorting, just give it the raw number
+                        if (type === 'sort' || type === 'type') {
+                            return mag;
+                        }
+                        
+                        // Otherwise, return the styled HTML badge
+                        if (mag > 2) {
+                            return `<span class="badge bg-danger badge-custom shadow-sm"><i class="fa-solid fa-triangle-exclamation me-1"></i> ${data}</span>`;
+                        } else if (mag > 0) {
+                            return `<span class="badge bg-warning text-dark badge-custom shadow-sm">${data}</span>`;
+                        } else {
+                            return `<span class="badge border border-secondary text-secondary badge-custom bg-transparent">${data || '0'}</span>`;
+                        }
+                    }
+                },
+                {
+                    data: 'Summary',
+                    className: 'text-wrap',
+                    render: function (data, type, row) {
+                        if (data && data !== "No general summary available.") {
+                            return `<div style="max-width: 400px; line-height: 1.4;">${data}</div>`;
+                        } else {
+                            return `<span class="text-muted fst-italic">No specific trait data recorded.</span>`;
+                        }
+                    }
+                }
+            ]
         });
 
-        // 3. Listen for clicks on BOTH toggle switches to instantly redraw the table
+        // 4. Trigger redraw on filter switches
         $('#filterClinvar, #filterNoData').on('change', function() {
             table.draw();
         });
