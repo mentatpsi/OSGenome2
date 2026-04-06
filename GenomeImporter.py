@@ -6,6 +6,7 @@ import time
 def parse_23andme_file(filepath: str) -> dict:
     """
     Reads a raw 23andMe DNA text file line-by-line and extracts SNPs and Genotypes.
+    Properly handles Indels (D/I) and single-allele calls on X/Y/mtDNA.
     """
     snp_dict = {}
     
@@ -27,14 +28,15 @@ def parse_23andme_file(filepath: str) -> dict:
             rsid = columns[0].strip().lower()
             raw_genotype = columns[3].strip()
             
-            # Format the 23andMe genotype to standard SNPedia syntax: (A;G)
-            if len(raw_genotype) == 2 and raw_genotype not in ["--", "DI"]:
+            # The bulletproof genotype parsing logic
+            if len(raw_genotype) == 2 and raw_genotype != "--":
                 formatted_genotype = f"({raw_genotype[0]};{raw_genotype[1]})"
-            elif len(raw_genotype) == 1 and raw_genotype not in ['-', 'D', 'I']:
+            elif len(raw_genotype) == 1 and raw_genotype != '-':
                 # Handle single-allele calls (often seen on Male X/Y or mtDNA in 23andMe)
+                # This will turn 'A' into '(A;A)' and 'D' into '(D;D)'
                 formatted_genotype = f"({raw_genotype[0]};{raw_genotype[0]})"
             else:
-                # Handle no-calls ('--' or '-') or complex indels
+                # Handle actual no-calls ('--' or '-')
                 formatted_genotype = "(-;-)"
                 
             snp_dict[rsid] = formatted_genotype
