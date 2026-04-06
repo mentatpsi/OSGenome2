@@ -131,7 +131,7 @@ Raw Data coming from Genetic tests done by Direct To Consumer companies such as 
 
 ## Acknowledgements
 
-- **Sergey Kornilov** ([Biostochastics](https://github.com/biostochastics)) for brief audit of bioinformatics correctness
+- **Dr. Sergey Kornilov** ([Biostochastics](https://github.com/biostochastics)) for brief audit of bioinformatics correctness
 
 ## License
 
