@@ -14,6 +14,7 @@ OSGenome2/
 ├── crawler.py             # SNPedia web crawler
 ├── GenomeImporter.py      # 23AndMe Genome Importer
 ├── snpDict.json          # Your 23AndMe SNP data (Genome Importer Generated)
+├── category_snps.jsonl   # LLM pre-generated category output (JSONL format)
 ├── detailed_snps.json    # Crawler output (JSONL format)
 ├── final_snps_array.json # Converted JSON array format
 ├── templates/
@@ -125,6 +126,7 @@ Converts line-delimited JSON to a standard JSON array format.
 - User alleles are automatically flipped if the SNP uses the minus strand orientation
 - Magnitude values > 2.0 are highlighted as high-impact variants
 - All data is processed locally; no personal data is sent to external servers.
+- Categories was processed through a local small parameter model LLM using the genotypes to produce searchable tags. It is imperfect, but highly useful for a majority of genotypes.
 
 ## Disclaimer
 Raw Data coming from Genetic tests done by Direct To Consumer companies such as 23andMe and Ancestry.com were found to have a false positive rate of 40% for genes with clinical significance in a March 2018 study [*False-positive results released by direct-to-consumer genetic tests highlight the importance of clinical confirmation testing for appropriate patient care*](https://www.nature.com/articles/gim201838). For this reason, it's important to confirm any at risk clinical SNPs with your doctor who can provide genetic tests and send them to a clinical laboratory.

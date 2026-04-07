@@ -41,9 +41,25 @@ def cross_reference_snps(db_filepath, user_filepath):
         user_data = {key.strip().lower(): value.strip() for key, value in raw_user_data.items()}
 
     results = []
+
+    # --- NEW: Load Category Lookup Table ---
+    category_lookup = {}
+
+    category_filepath = os.path.join(os.path.dirname(db_filepath), 'category_snps.jsonl')
+
+    if os.path.exists(category_filepath):
+        with open(category_filepath, 'r') as f:
+            for line in f:
+                if line.strip():
+                    cat_data = json.loads(line)
+                    # Use lower case rsid as the key for matching
+                    rsid = cat_data.get("rsid", "").strip().lower()
+                    category_lookup[rsid] = cat_data.get("categories", [])
     
     if not os.path.exists(db_filepath):
         return []
+
+        
 
     with open(db_filepath, 'r') as f:
         for line in f:
@@ -62,6 +78,8 @@ def cross_reference_snps(db_filepath, user_filepath):
                 
                 specific_summary = snp_info.get("Top_Summary", "No general summary available.")
                 magnitude = "0"
+
+                categories = category_lookup.get(snp_id_lower, [])
                 
                 # Check for the exact processed allele
                 for geno in snp_info.get("Genotypes", []):
@@ -80,7 +98,8 @@ def cross_reference_snps(db_filepath, user_filepath):
                     "Processed_Allele": processed_user_allele,
                     "Orientation": orientation,
                     "Magnitude": magnitude,
-                    "Summary": specific_summary
+                    "Summary": specific_summary,
+                    "Categories": categories
                 })
 
     # Sort results by magnitude (highest first)
