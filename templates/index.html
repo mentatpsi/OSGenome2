@@ -157,21 +157,27 @@
                     }
                 },
                 { 
-        data: 'Categories', 
-            render: function(data) {
-                if (!data || data.length === 0) return '';
-                
-                // Map each category to a Bootstrap badge (the "bubble")
-                return data.map(cat => {
-                    // You can add logic here to change colors based on the category name
-                    let colorClass = 'bg-info text-dark'; 
-                    if (cat.includes('Variant')) colorClass = 'bg-primary';
-                    if (cat.includes('Data')) colorClass = 'bg-secondary';
-                    
-                    return `<span class="badge ${colorClass} rounded-pill me-1" style="font-weight: 500;">${cat}</span>`;
-                }).join('');
-            }
-            },
+                    data: 'Categories', 
+                    render: function(data) {
+                        if (!data || data.length === 0) return '';
+                        
+                        // Tooltip transparency text
+                        let tooltipText = "Categorized by a small-parameter local LLM (Llama 3.2). May be prone to error.";
+                        
+                        return data.map(cat => {
+                            let colorClass = 'bg-info text-dark'; 
+                            if (cat.includes('Variant')) colorClass = 'bg-primary text-white';
+                            if (cat.includes('Data')) colorClass = 'bg-secondary text-white';
+                            
+                            // Added data-bs-toggle, title, and cursor: help
+                            return `<span class="badge ${colorClass} rounded-pill me-1" 
+                                          style="font-weight: 500; cursor: help;" 
+                                          data-bs-toggle="tooltip" 
+                                          data-bs-placement="top"
+                                          title="${tooltipText}">${cat}</span>`;
+                        }).join('');
+                    }
+                },
                 {
                     data: 'Original_Allele',
                     render: function (data, type, row) {
@@ -225,6 +231,22 @@
         $('#filterClinvar, #filterNoData').on('change', function() {
             table.draw();
         });
+
+        // 5. Initialize Bootstrap Tooltips dynamically on table draw
+        table.on('draw.dt', function () {
+            let tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                // Destroy old tooltip if it exists to prevent ghosting, then create new
+                let existingTooltip = bootstrap.Tooltip.getInstance(tooltipTriggerEl);
+                if (existingTooltip) {
+                    existingTooltip.dispose();
+                }
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        });
+        
+        // Trigger it once for the initial load
+        $('#snpTable').trigger('draw.dt');
     });
 </script>
 
