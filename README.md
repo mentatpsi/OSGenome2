@@ -3,7 +3,7 @@
 An Open Source Web Application for Genetic Data (SNPs) using 23AndMe and Data Crawling Technologies
 
 ## Example
-![Example of App](https://github.com/mentatpsi/OSGenome2/blob/main/screenshots/OSGenome04-06.png)
+![Example of App](https://github.com/mentatpsi/OSGenome2/blob/main/screenshots/OSGenome04-07.png)
 
 ## Overview
 
