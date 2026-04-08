@@ -5,6 +5,9 @@ An Open Source Web Application for Genetic Data (SNPs) using 23AndMe and Data Cr
 ## Example
 ![Example of App](https://github.com/mentatpsi/OSGenome2/blob/main/screenshots/OSGenome04-07.png)
 
+
+![Example of App](https://github.com/mentatpsi/OSGenome2/blob/main/screenshots/OSGenome04-08.png)
+
 ## Overview
 
 OSGenome2 is a Flask-based web application that cross-references your personal SNP data with a comprehensive SNPedia database to provide personalized genomic insights and trait analysis.
