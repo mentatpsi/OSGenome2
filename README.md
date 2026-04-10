@@ -132,7 +132,7 @@ Converts line-delimited JSON to a standard JSON array format.
 - User alleles are automatically flipped if the SNP uses the minus strand orientation
 - Magnitude values > 2.0 are highlighted as high-impact variants
 - All data is processed locally; no personal data is sent to external servers.
-- Categories was processed through a local small parameter model LLM using the genotypes to produce searchable tags. It is imperfect, but highly useful for a majority of genotypes.
+- Categories was processed through a local small parameter LLM using the genotypes to produce searchable tags. It is imperfect, but highly useful for a majority of genotypes. There have been a couple instances were a category has been created from latent pre-training data that was only confirmed from either a Google search with the key words and the SNP or from SNPedia directly, and a few cases where it incorrectly determined a category.  I have added a tooltip on the AI generated category UI bubble to encourage research, rather than make assumptions.
 
 ## Disclaimer
 Raw Data coming from Genetic tests done by Direct To Consumer companies such as 23andMe and Ancestry.com were found to have a false positive rate of 40% for genes with clinical significance in a March 2018 study [*False-positive results released by direct-to-consumer genetic tests highlight the importance of clinical confirmation testing for appropriate patient care*](https://www.nature.com/articles/gim201838). For this reason, it's important to confirm any at risk clinical SNPs with your doctor who can provide genetic tests and send them to a clinical laboratory.
