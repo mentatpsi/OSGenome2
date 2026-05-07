@@ -73,7 +73,7 @@ For complete coverage of every SNP in your specific genome:
 1. Delete `detailed_snps.json`
 2. Run `python crawler.py`
 
-The crawler queries SNPedia for each rsID in your `snpDict.json` at one request per second (to be respectful to SNPedia's servers). A full 23andMe genome contains ~600,000 SNPs, though SNPedia only has meaningful data for a fraction of them. **Expect the crawl to run for several hours.** The app can be used at any point during the crawl — it reloads new results automatically as the file grows.
+The crawler queries SNPedia for each rsID in your `snpDict.json` at one request per second (to be respectful to SNPedia's servers). A full 23andMe genome contains ~600,000 SNPs, though SNPedia only has meaningful data for a fraction of them. **Expect the crawl to run for several hours.** The app can be used at any point during the crawl, it reloads new results automatically as the file grows.
 
 ---
 
