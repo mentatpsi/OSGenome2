@@ -19,6 +19,19 @@
         
         #filterClinvar:checked { background-color: #3498db; border-color: #3498db; }
         #filterNoData:checked { background-color: #e67e22; border-color: #e67e22; }
+
+        .cat-pill {
+            cursor: pointer; font-size: 0.74em; font-weight: 600;
+            padding: 0.35em 0.85em; border-radius: 50rem;
+            border-width: 1.5px; border-style: solid;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+            user-select: none; display: inline-flex; align-items: center; gap: 0.3em;
+            letter-spacing: 0.01em;
+        }
+        .cat-pill:hover { transform: translateY(-2px); box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
+        .cat-pill.active { transform: translateY(-2px); box-shadow: 0 3px 10px rgba(0,0,0,0.2); }
+        #categoryPills { max-height: 120px; overflow-y: auto; line-height: 2.4; padding: 2px 0; }
+        #catSearch:focus { box-shadow: none; border-color: #2c3e50; }
     </style>
 </head>
 <body>
@@ -66,6 +79,21 @@
                 </div>
             </div>
             
+            <div class="border-bottom pb-3 mb-3">
+                <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                    <span class="text-muted small fw-semibold">
+                        <i class="fa-solid fa-tags fa-sm me-1"></i>Filter by Category
+                    </span>
+                    <input type="text" id="catSearch" class="form-control form-control-sm"
+                           placeholder="Search categories..." style="max-width: 180px; border-radius: 20px;">
+                    <button id="clearCatFilter" class="btn btn-sm btn-outline-secondary py-0 px-3" style="border-radius: 20px;">
+                        Clear
+                    </button>
+                    <span id="activeCatCount" class="text-muted small fst-italic" style="display:none;"></span>
+                </div>
+                <div id="categoryPills"></div>
+            </div>
+
             <div class="table-responsive">
                 <table id="snpTable" class="table table-hover align-middle mb-0" style="width:100%">
                     <thead class="table-light">
@@ -118,7 +146,36 @@
             }
         );
 
-        // 2. Initialize Table with deferred rendering
+        // 2. Shared color function — used by both filter pills and table column badges
+        function getCatColor(cat) {
+            const c = cat.toLowerCase();
+            if (c.includes('cancer') || c.includes('hereditary') || c.includes('lynch') || c.includes('polyposis') || c.includes('melanoma') || c.includes('cowden') || c.includes('li-fraumeni') || c.includes('von hippel') || c.includes('peutz') || c.includes('birt-hogg') || c.includes('paraganglioma') || c.includes('pheochromocytoma')) return '#c0392b';
+            if (c.includes('cardiovascular') || c.includes('cardiomyopathy') || c.includes('hypertrophic') || c.includes('dilated') || c.includes('arrhythmia') || c.includes('long qt') || c.includes('brugada') || c.includes('aortic') || c.includes('cholesterol') || c.includes('blood pressure') || c.includes('hdl') || c.includes('triglyceride') || c.includes('statin') || c.includes('noonan') || c.includes('hemorrhagic') || c.includes('familial hypercholesterol') || c.includes('familial polyp')) return '#e67e22';
+            if (c.includes('neurological') || c.includes("alzheimer") || c.includes("parkinson") || c.includes('huntington') || c.includes('multiple sclerosis') || c.includes('migraine') || c.includes('epilepsy') || c.includes('tuberous') || c.includes('neurofibromatosis') || c.includes('spinal muscular') || c.includes('lipofuscin') || c.includes('intellectual') || c.includes('rett') || c.includes('mitochondrial')) return '#8e44ad';
+            if (c.includes('metabolic') || c.includes('phenylketonuria') || c.includes('pompe') || c.includes('fabry') || c.includes('tay-sachs') || c.includes('gaucher') || c.includes('wilson') || c.includes('hemochromatosis') || c.includes('porphyria') || c.includes('mody') || c.includes('diabetes') || c.includes('obesity') || c.includes('fatty acid') || c.includes('mcad') || c.includes('methylmalonic') || c.includes('urea cycle') || c.includes('galactosemia') || c.includes('niemann') || c.includes('mucolipidosis') || c.includes('cystinosis') || c.includes('glut1') || c.includes('gracile')) return '#d35400';
+            if (c.includes('drug') || c.includes('pharmacogenomics') || c.includes('warfarin') || c.includes('thiopurine') || c.includes('chemotherapy') || c.includes('alcohol') || c.includes('hypersensitivity')) return '#16a085';
+            if (c.includes('blood disorder') || c.includes('sickle cell') || c.includes('thalassemia') || c.includes('hemophilia') || c.includes('thrombocytopenia') || c.includes('willebrand') || c.includes('platelet') || c.includes('coagulation') || c.includes('thrombophilia')) return '#922b21';
+            if (c.includes('blood type')) return '#2471a3';
+            if (c.includes('autoimmune') || c.includes('rheumatoid') || c.includes('celiac') || c.includes('lupus') || c.includes('familial mediterranean') || c.includes('inflammatory') || c.includes('psoriasis')) return '#c0392b';
+            if (c.includes('eye') || c.includes('retinal') || c.includes('retinitis') || c.includes('macular') || c.includes('usher')) return '#1a6fa8';
+            if (c.includes('hearing') || c.includes('deafness') || c.includes('pendred')) return '#0097a7';
+            if (c.includes('respiratory') || c.includes('cystic fibrosis') || c.includes('antitrypsin')) return '#0097a7';
+            if (c.includes('kidney') || c.includes('polycystic') || c.includes('gitelman') || c.includes('bartter') || c.includes('cystinuria') || c.includes('hyperoxaluria')) return '#00897b';
+            if (c.includes('connective') || c.includes('marfan') || c.includes('ehlers') || c.includes('osteogenesis') || c.includes('loeys') || c.includes('schwartz')) return '#1e8449';
+            if (c.includes('bone') || c.includes('hypophosphatasia')) return '#6d4c41';
+            if (c.includes('skin') || c.includes('epidermolysis')) return '#bf360c';
+            if (c.includes('neuromuscular') || c.includes('myotonia') || c.includes('myopathy') || c.includes('muscular dystrophy') || c.includes('emery')) return '#4527a0';
+            if (c.includes('psychiatric') || c.includes('bipolar') || c.includes('dopamine') || c.includes('serotonin') || c.includes('monoamine')) return '#6a1b9a';
+            if (c.includes('nutrition') || c.includes('vitamin') || c.includes('folate')) return '#558b2f';
+            if (c.includes('circadian') || c.includes('sleep')) return '#546e7a';
+            if (c.includes('infectious') || c.includes('hiv')) return '#b71c1c';
+            if (c.includes('sensory') || c.includes('taste')) return '#01579b';
+            if (c.includes('physical') || c.includes('height') || c.includes('hair')) return '#2e7d32';
+            if (c.includes('immune') || c.includes('complement')) return '#7b1fa2';
+            return '#546e7a';
+        }
+
+        // 3. Initialize Table with deferred rendering
         var table = $('#snpTable').DataTable({
             data: tableData,             // Feed the raw JSON data
             deferRender: true,           // <--- THIS IS THE MAGIC BULLET FOR SPEED
@@ -134,7 +191,7 @@
                  "<'row'<'col-sm-12'tr>>" +
                  "<'row mt-3'<'col-md-5'i><'col-md-7'p>>",
             
-            // 3. Tell DataTables how to format the raw JSON into HTML for each column
+            // 4. Tell DataTables how to format the raw JSON into HTML for each column
             columns: [
 
                 {
@@ -156,23 +213,16 @@
                             <span class="badge bg-secondary rounded-pill" style="font-size: 0.75em;">Chr ${row.Chromosome}</span>`;
                     }
                 },
-                { 
-                    data: 'Categories', 
+                {
+                    data: 'Categories',
                     render: function(data) {
                         if (!data || data.length === 0) return '';
-                        
-                        // Tooltip transparency text
-                        let tooltipText = "Categorized by Claude (Anthropic). Click on the RSID to open SNPedia to confirm.";
-                        
+                        const tooltipText = "Categorized by Claude (Anthropic). Click on the RSID to open SNPedia to confirm.";
                         return data.map(cat => {
-                            let colorClass = 'bg-info text-dark'; 
-                            if (cat.includes('Variant')) colorClass = 'bg-primary text-white';
-                            if (cat.includes('Data')) colorClass = 'bg-secondary text-white';
-                            
-                            // Added data-bs-toggle, title, and cursor: help
-                            return `<span class="badge ${colorClass} rounded-pill me-1" 
-                                          style="font-weight: 500; cursor: help;" 
-                                          data-bs-toggle="tooltip" 
+                            const color = getCatColor(cat);
+                            return `<span class="badge rounded-pill me-1"
+                                          style="background-color:${color}1a; border:1.5px solid ${color}; color:${color}; font-weight:600; font-size:0.74em; cursor:help;"
+                                          data-bs-toggle="tooltip"
                                           data-bs-placement="top"
                                           title="${tooltipText}">${cat}</span>`;
                         }).join('');
@@ -232,7 +282,70 @@
             table.draw();
         });
 
-        // 5. Initialize Bootstrap Tooltips dynamically on table draw
+        // 5. Category filter
+        const activeCats = new Set();
+        const allCats = [...new Set(tableData.flatMap(r => r.Categories || []))].sort();
+
+        function renderPills(query) {
+            const q = (query || '').toLowerCase();
+            const visible = q ? allCats.filter(c => c.toLowerCase().includes(q)) : allCats;
+            const $container = $('#categoryPills').empty();
+            visible.forEach(cat => {
+                const color = getCatColor(cat);
+                const isActive = activeCats.has(cat);
+                const $pill = $('<span class="badge me-1 mb-1 cat-pill"></span>')
+                    .addClass(isActive ? 'active' : '')
+                    .css({
+                        'background-color': isActive ? color : `${color}1a`,
+                        'border-color': color,
+                        'color': isActive ? '#fff' : color
+                    });
+                if (isActive) $pill.append('<i class="fa-solid fa-check fa-xs"></i> ');
+                $pill.append(document.createTextNode(cat));
+                $pill.data('cat', cat);
+                $container.append($pill);
+            });
+        }
+
+        $.fn.dataTable.ext.search.push(function(settings, searchData, index, rowData) {
+            if (activeCats.size === 0) return true;
+            return (rowData.Categories || []).some(c => activeCats.has(c));
+        });
+
+        renderPills();
+
+        $('#categoryPills').on('click', '.cat-pill', function() {
+            const cat = $(this).data('cat');
+            const color = getCatColor(cat);
+            if (activeCats.has(cat)) {
+                activeCats.delete(cat);
+                $(this).removeClass('active')
+                    .css({ 'background-color': `${color}1a`, 'color': color })
+                    .find('i').remove();
+            } else {
+                activeCats.add(cat);
+                $(this).addClass('active')
+                    .css({ 'background-color': color, 'color': '#fff' })
+                    .prepend('<i class="fa-solid fa-check fa-xs"></i> ');
+            }
+            const n = activeCats.size;
+            $('#activeCatCount').toggle(n > 0).text(`${n} selected`);
+            table.draw();
+        });
+
+        $('#catSearch').on('input', function() {
+            renderPills($(this).val());
+        });
+
+        $('#clearCatFilter').on('click', function() {
+            activeCats.clear();
+            $('#catSearch').val('');
+            $('#activeCatCount').hide();
+            renderPills();
+            table.draw();
+        });
+
+        // 6. Initialize Bootstrap Tooltips dynamically on table draw
         table.on('draw.dt', function () {
             let tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
             tooltipTriggerList.map(function (tooltipTriggerEl) {
