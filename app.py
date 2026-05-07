@@ -1,10 +1,15 @@
 from flask import Flask, render_template
 import json
 import os
+import threading
+import time
 
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+_DB_FILE  = os.path.join(BASE_DIR, 'detailed_snps.json')
+_CAT_FILE = os.path.join(BASE_DIR, 'category_snps.jsonl')
 
 
 def format_user_allele(allele_string, orientation):
@@ -30,12 +35,11 @@ def format_user_allele(allele_string, orientation):
 
 
 def _load_snp_db():
-    """Builds a dict keyed by lowercase SNP ID from detailed_snps.json at startup."""
-    db_file = os.path.join(BASE_DIR, 'detailed_snps.json')
+    """Builds a dict keyed by lowercase SNP ID from detailed_snps.json."""
     index = {}
-    if not os.path.exists(db_file):
+    if not os.path.exists(_DB_FILE):
         return index
-    with open(db_file, 'r') as f:
+    with open(_DB_FILE, 'r') as f:
         for line in f:
             if not line.strip():
                 continue
@@ -48,12 +52,11 @@ def _load_snp_db():
 
 
 def _load_category_lookup():
-    """Builds a dict keyed by lowercase rsid from category_snps.jsonl at startup."""
-    category_file = os.path.join(BASE_DIR, 'category_snps.jsonl')
+    """Builds a dict keyed by lowercase rsid from category_snps.jsonl."""
     lookup = {}
-    if not os.path.exists(category_file):
+    if not os.path.exists(_CAT_FILE):
         return lookup
-    with open(category_file, 'r') as f:
+    with open(_CAT_FILE, 'r') as f:
         for line in f:
             if not line.strip():
                 continue
@@ -63,9 +66,59 @@ def _load_category_lookup():
     return lookup
 
 
-# Load once at startup — these files don't change between requests
-SNP_DB = _load_snp_db()
-CATEGORY_LOOKUP = _load_category_lookup()
+# How long to wait between reloads while a file is actively being written to.
+# The crawler appends ~1 SNP/second, so this prevents a full re-index on every request.
+RELOAD_COOLDOWN = 15  # seconds
+
+# Cache with mtime tracking — reloads automatically when files change on disk
+SNP_DB: dict = {}
+CATEGORY_LOOKUP: dict = {}
+_db_mtime: float | None = None
+_cat_mtime: float | None = None
+_last_reload: float = 0.0
+_cache_lock = threading.Lock()
+
+
+def _mtime(path: str) -> float | None:
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return None
+
+
+def _refresh_cache():
+    """Reload whichever files changed, but at most once per RELOAD_COOLDOWN seconds."""
+    global SNP_DB, CATEGORY_LOOKUP, _db_mtime, _cat_mtime, _last_reload
+
+    current_db_mtime  = _mtime(_DB_FILE)
+    current_cat_mtime = _mtime(_CAT_FILE)
+
+    # Fast path: nothing changed at all
+    if current_db_mtime == _db_mtime and current_cat_mtime == _cat_mtime:
+        return
+
+    # Something changed — but only act if the cooldown has elapsed
+    if time.monotonic() - _last_reload < RELOAD_COOLDOWN:
+        return
+
+    with _cache_lock:
+        # Re-check inside the lock so two simultaneous requests don't both reload
+        if time.monotonic() - _last_reload < RELOAD_COOLDOWN:
+            return
+
+        if current_db_mtime != _db_mtime:
+            SNP_DB = _load_snp_db()
+            _db_mtime = current_db_mtime
+
+        if current_cat_mtime != _cat_mtime:
+            CATEGORY_LOOKUP = _load_category_lookup()
+            _cat_mtime = current_cat_mtime
+
+        _last_reload = time.monotonic()
+
+
+# Initial load
+_refresh_cache()
 
 
 def cross_reference_snps(user_filepath):
@@ -125,6 +178,7 @@ def _safe_float(value):
 
 @app.route('/')
 def index():
+    _refresh_cache()
     user_file = os.path.join(BASE_DIR, 'snpDict.json')
     report_data = cross_reference_snps(user_file)
     return render_template('index.html', report_data=report_data)
