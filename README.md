@@ -28,6 +28,8 @@ OSGenome2/
 ├── snpDict.json          # Your 23AndMe SNP data (Genome Importer Generated)
 ├── category_snps.jsonl   # Claude-curated category tags (JSONL format)
 ├── detailed_snps.json    # SNPedia data — starter dataset included (see below)
+├── snpedia_snps.json     # Cached list of all SNPedia rsIDs — included
+├── crawl_progress.jsonl  # Crawler progress tracking — created on first crawl run
 ├── templates/
 │   └── index.html        # Dashboard UI
 ├── README.md
@@ -119,6 +121,47 @@ python crawler.py
 4. Retrieves all genotype-specific data (magnitude & traits)
 5. Writes results line-by-line to `detailed_snps.json` (JSONL format)
 
+#### Resuming an Interrupted Crawl
+
+The crawler tracks every attempted SNP in `crawl_progress.jsonl` — including failures and gateway errors — so re-running the command will always pick up exactly where it left off without re-scanning anything.
+
+```bash
+python crawler.py          # resumes automatically from crawl_progress.jsonl
+```
+
+#### Crawler Flags
+
+| Flag | Description |
+|------|-------------|
+| `-s` / `--start <rsID\|index>` | Skip all SNPs before this point and mark them as `skipped` in the progress file. Accepts an rsID (e.g. `rs53576`) or a zero-based numeric index. |
+| `--crawl-skipped` | Re-crawl SNPs previously marked as `skipped` via `--start`, while still skipping anything already successfully crawled or confirmed missing. |
+| `--reset` | Clear the progress file entirely and start the crawl from scratch. |
+| `--refresh-snplist` | Re-fetch the SNPedia SNP list even if a local cache (`snpedia_snps.json`) exists. |
+
+#### SNPedia Pre-filter (`snpedia_snps.json`)
+
+`snpedia_snps.json` is a cached list of every rsID that SNPedia has a page for, fetched from `Category:Is_a_snp`. **This file is included in the repository** — generating it from scratch takes ~30 minutes of paginated API calls, so the cached copy lets you start crawling immediately.
+
+Before each crawl, your genome's SNPs are pre-filtered against this list so SNPs with no SNPedia page are never queried. A typical 23andMe genome has ~600,000 SNPs; SNPedia covers roughly 25,000 of them, so this eliminates the majority of wasted requests.
+
+**To refresh the cache** (e.g. to pick up SNPs newly added to SNPedia):
+
+```bash
+python crawler.py --refresh-snplist
+```
+
+Or delete the file manually and re-run — the crawler will regenerate it automatically.
+
+**Example workflow — start mid-list, then backfill:**
+
+```bash
+# Start crawling from rs53576 (skips everything before it)
+python crawler.py --start rs53576
+
+# Later: go back and fill in the entries that were skipped above
+python crawler.py --crawl-skipped
+```
+
 ### Step 3: Run the Web Application
 
 Start the Flask app (can be run at any point — with or without running the crawler):
@@ -150,13 +193,52 @@ Retrieves all genotype variations for a specific SNP with their:
 ### `convert_jsonl_to_json(input_file, output_file)`
 Converts line-delimited JSON to a standard JSON array format.
 
+### Progress Tracking (`crawl_progress.jsonl`)
+The crawler maintains a JSONL progress file alongside `detailed_snps.json`. Each line records one attempted SNP:
+
+```json
+{"snp": "rs53576", "status": "success"}
+{"snp": "rs1815739", "status": "not_found"}
+{"snp": "rs6152", "status": "skipped"}
+```
+
+| Status | Meaning |
+|--------|---------|
+| `success` | SNPedia returned data; written to `detailed_snps.json` |
+| `not_found` | SNP has no SNPedia page |
+| `skipped` | Skipped via `--start`; can be re-crawled with `--crawl-skipped` |
+
+Re-running the crawler always skips `success` and `not_found` entries. Only `skipped` entries can be selectively resumed.
+
 ## Dashboard Features
 
 - **SNP Explorer**: Browse all matched SNPs with detailed genotype information
+- **Category Filter**: Clickable color-coded pills to filter by disease area
 - **Filtering**: Hide "Common in ClinVar" variants and empty traits
 - **Sorting**: Sort by magnitude (effect size) to identify high-impact variants
 - **Search**: Quick search across genes, SNP IDs, and traits
 - **Responsive Design**: Mobile-friendly Bootstrap interface
+
+## Category Color Guide
+
+Category badges are color-coded by disease area — both in the filter panel and in the table — so you can spot related variants at a glance.
+
+| Color | Disease Area | Example Categories |
+|-------|-------------|-------------------|
+| 🔴 Red | Hereditary Cancer & Autoimmune | Hereditary Cancer, Lynch Syndrome, Breast/Ovarian Cancer, Rheumatoid Arthritis |
+| 🟠 Orange | Cardiovascular | Cardiovascular Disease, Cardiomyopathy, Hypertrophic Cardiomyopathy, Familial Hypercholesterolemia, Aortic Aneurysm |
+| 🟣 Purple | Neurological | Neurological Disease, Alzheimer's Disease, Parkinson's Disease, Epilepsy, Tuberous Sclerosis |
+| 🟤 Dark Orange | Metabolic | Metabolic Disease, Phenylketonuria, Gaucher Disease, MCAD Deficiency, Hemochromatosis |
+| 🟢 Teal | Drug Metabolism | Drug Metabolism, Pharmacogenomics, Warfarin Sensitivity, Alcohol Metabolism |
+| 🔴 Dark Red | Blood Disorders | Blood Disorders, Thrombophilia, Sickle Cell Disease, Hemophilia |
+| 🔵 Blue | Eye & Blood Type | Eye Disease, Retinitis Pigmentosa, Age-Related Macular Degeneration, Blood Type |
+| 🔵 Cyan | Respiratory & Hearing | Respiratory Disease, Cystic Fibrosis, Hearing Loss |
+| 🟢 Green | Connective Tissue & Kidney | Connective Tissue Disease, Marfan Syndrome, Ehlers-Danlos Syndrome, Kidney Disease |
+| 🟤 Brown | Bone | Bone Disease, Hypophosphatasia |
+| 🟠 Burnt Orange | Skin | Skin Disease, Epidermolysis Bullosa |
+| 🟣 Deep Purple | Neuromuscular & Psychiatric | Neuromuscular Disease, Psychiatric Traits, Bipolar Disorder Risk, Dopamine Metabolism |
+| 🟢 Olive | Nutrition & Physical Traits | Nutrition & Vitamins, Vitamin D, Physical Traits, Height |
+| ⚫ Grey | Unclassified | Clinical Variant (SNPs not matched to a known disease category) |
 
 ## Notes
 
