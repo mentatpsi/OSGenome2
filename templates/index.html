@@ -120,8 +120,12 @@
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 
 <script>
-    // Safely inject the Python data array directly into JavaScript
     const tableData = {{ report_data | tojson }};
+
+    function escapeHtml(str) {
+        if (str == null) return '';
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
 
     $(document).ready(function() {
         
@@ -197,10 +201,11 @@
                 {
                     data: 'SNP',
                     render: function (data, type, row) {
-                        let orientation = row.Orientation.charAt(0).toUpperCase() + row.Orientation.slice(1);
+                        let safe = escapeHtml(data);
+                        let orientation = escapeHtml(row.Orientation.charAt(0).toUpperCase() + row.Orientation.slice(1));
                         return `
-                            <a href="https://www.snpedia.com/index.php/${data}" target="_blank" class="text-primary text-decoration-none fw-bold snp-link text-nowrap" title="Read more on SNPedia">
-                                ${data} <i class="fa-solid fa-arrow-up-right-from-square fa-xs ms-1 opacity-75"></i>
+                            <a href="https://www.snpedia.com/index.php/${safe}" target="_blank" class="text-primary text-decoration-none fw-bold snp-link text-nowrap" title="Read more on SNPedia">
+                                ${safe} <i class="fa-solid fa-arrow-up-right-from-square fa-xs ms-1 opacity-75"></i>
                             </a>
                             <br><small class="text-muted"><i class="fa-solid fa-arrow-right-arrow-left fa-xs me-1"></i> ${orientation} strand</small>`;
                     }
@@ -209,8 +214,8 @@
                     data: 'Gene',
                     render: function (data, type, row) {
                         return `
-                            <span class="fw-bold text-dark">${data}</span><br>
-                            <span class="badge bg-secondary rounded-pill" style="font-size: 0.75em;">Chr ${row.Chromosome}</span>`;
+                            <span class="fw-bold text-dark">${escapeHtml(data)}</span><br>
+                            <span class="badge bg-secondary rounded-pill" style="font-size: 0.75em;">Chr ${escapeHtml(row.Chromosome)}</span>`;
                     }
                 },
                 {
@@ -224,7 +229,7 @@
                                           style="background-color:${color}1a; border:1.5px solid ${color}; color:${color}; font-weight:600; font-size:0.74em; cursor:help;"
                                           data-bs-toggle="tooltip"
                                           data-bs-placement="top"
-                                          title="${tooltipText}">${cat}</span>`;
+                                          title="${tooltipText}">${escapeHtml(cat)}</span>`;
                         }).join('');
                     }
                 },
@@ -268,7 +273,7 @@
                     className: 'text-wrap',
                     render: function (data, type, row) {
                         if (data && data !== "No general summary available.") {
-                            return `<div style="max-width: 400px; line-height: 1.4;">${data}</div>`;
+                            return `<div style="max-width: 400px; line-height: 1.4;">${escapeHtml(data)}</div>`;
                         } else {
                             return `<span class="text-muted fst-italic">No specific trait data recorded.</span>`;
                         }
