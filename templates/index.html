@@ -32,6 +32,65 @@
         .cat-pill.active { transform: translateY(-2px); box-shadow: 0 3px 10px rgba(0,0,0,0.2); }
         #categoryPills { max-height: 120px; overflow-y: auto; line-height: 2.4; padding: 2px 0; }
         #catSearch:focus { box-shadow: none; border-color: #2c3e50; }
+
+        /* ── Analyze button ── */
+        .analyze-btn { opacity: 0.55; transition: opacity 0.15s; }
+        .analyze-btn:hover { opacity: 1; }
+        #analyzeContent { white-space: pre-wrap; line-height: 1.75; font-size: 0.92em; }
+
+        /* ── Chat toggle ── */
+        #chatToggleBtn {
+            position: fixed; bottom: 2rem; right: 2rem;
+            width: 56px; height: 56px; border-radius: 50%;
+            z-index: 1040; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 18px rgba(52,152,219,0.45);
+            transition: transform 0.18s, box-shadow 0.18s;
+        }
+        #chatToggleBtn:hover { transform: scale(1.08); box-shadow: 0 6px 22px rgba(52,152,219,0.55); }
+        #chatToggleBtn.offline { background:#6c757d !important; border-color:#6c757d !important; box-shadow: none; }
+
+        /* ── Chat panel ── */
+        #chatPanel {
+            position: fixed; bottom: 5.5rem; right: 2rem;
+            width: 370px; height: 520px;
+            z-index: 1039; border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+            background: white; border: 1px solid rgba(0,0,0,0.07);
+            flex-direction: column; overflow: hidden;
+            display: none;
+        }
+        #chatMessages {
+            flex: 1; overflow-y: auto; padding: 1rem;
+            display: flex; flex-direction: column; gap: 0.7rem;
+        }
+        .chat-bubble {
+            max-width: 82%; padding: 0.55rem 0.9rem;
+            font-size: 0.875em; line-height: 1.5;
+            white-space: pre-wrap; word-break: break-word;
+        }
+        .chat-bubble.user {
+            background: #3498db; color: white;
+            border-radius: 16px 16px 4px 16px; align-self: flex-end;
+        }
+        .chat-bubble.assistant {
+            background: #f1f5f9; color: #2c3e50;
+            border-radius: 16px 16px 16px 4px; align-self: flex-start;
+        }
+        .typing-indicator {
+            display: flex; gap: 5px; align-items: center;
+            padding: 0.55rem 0.9rem; background: #f1f5f9;
+            border-radius: 16px 16px 16px 4px; align-self: flex-start;
+        }
+        .typing-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: #94a3b8; animation: typingBounce 1.2s infinite;
+        }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typingBounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-5px); }
+        }
     </style>
 </head>
 <body>
@@ -104,12 +163,86 @@
                             <th>Your Genotype</th>
                             <th>Magnitude</th>
                             <th>Trait / Summary</th>
-
+                            <th></th>
                         </tr>
                     </thead>
                     </table>
             </div>
 
+        </div>
+    </div>
+</div>
+
+<!-- ── Analyze SNP Modal ── -->
+<div class="modal fade" id="analyzeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="background:linear-gradient(135deg,#2c3e50,#3498db);color:white;">
+                <div>
+                    <h5 class="modal-title mb-0">
+                        <i class="fa-solid fa-robot me-2"></i>AI Analysis:
+                        <span id="analyzeSnpId" class="font-monospace fw-bold"></span>
+                    </h5>
+                    <div id="analyzeSnpMeta" class="small opacity-75 mt-1"></div>
+                </div>
+                <button type="button" class="btn-close btn-close-white ms-3" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="min-height:220px;">
+                <div id="analyzeLoading" class="text-center py-5" style="display:none;">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <div class="text-muted small mt-2">Asking Ollama…</div>
+                </div>
+                <div id="analyzeError" class="alert alert-danger mt-2" style="display:none;"></div>
+                <div id="analyzeContent"></div>
+            </div>
+            <div class="modal-footer">
+                <div class="d-flex align-items-center gap-2 me-auto">
+                    <label class="text-muted small mb-0">Model:</label>
+                    <select id="analyzeModel" class="form-select form-select-sm" style="width:auto;"></select>
+                </div>
+                <button id="analyzeRerunBtn" class="btn btn-primary btn-sm">
+                    <i class="fa-solid fa-rotate-right me-1"></i>Re-analyze
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Chat toggle button ── -->
+<button id="chatToggleBtn" class="btn btn-primary" title="Genome Assistant (Ollama)">
+    <i class="fa-solid fa-comments fa-lg" id="chatIcon"></i>
+</button>
+
+<!-- ── Chat panel ── -->
+<div id="chatPanel">
+    <div style="background:linear-gradient(135deg,#2c3e50,#3498db);color:white;padding:0.9rem 1rem;flex-shrink:0;">
+        <div class="d-flex justify-content-between align-items-center">
+            <span class="fw-semibold"><i class="fa-solid fa-dna me-2 opacity-75"></i>Genome Assistant</span>
+            <div class="d-flex align-items-center gap-2">
+                <select id="chatModel" class="form-select form-select-sm"
+                    style="width:auto;background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);font-size:0.8em;">
+                </select>
+                <button id="chatClearBtn" class="btn btn-sm p-0 opacity-75" style="color:white;" title="Clear conversation">
+                    <i class="fa-solid fa-trash-can fa-sm"></i>
+                </button>
+            </div>
+        </div>
+        <div class="small mt-1 opacity-60">Ask questions about your DNA data</div>
+    </div>
+    <div id="chatMessages">
+        <div id="chatEmpty" class="text-center text-muted py-5">
+            <i class="fa-solid fa-dna fa-2x d-block mb-2 opacity-25"></i>
+            <span class="small">Ask me anything about your genetic variants</span>
+        </div>
+    </div>
+    <div style="border-top:1px solid #e9ecef;padding:0.7rem;flex-shrink:0;">
+        <div class="input-group input-group-sm">
+            <input type="text" id="chatInput" class="form-control"
+                   placeholder="Ask about your DNA…" style="border-radius:20px 0 0 20px;">
+            <button id="chatSendBtn" class="btn btn-primary" style="border-radius:0 20px 20px 0;">
+                <i class="fa-solid fa-paper-plane"></i>
+            </button>
         </div>
     </div>
 </div>
@@ -121,6 +254,7 @@
 
 <script>
     const tableData = {{ report_data | tojson }};
+    const genomeSummary = {{ genome_summary | tojson }};
 
     function escapeHtml(str) {
         if (str == null) return '';
@@ -278,6 +412,15 @@
                             return `<span class="text-muted fst-italic">No specific trait data recorded.</span>`;
                         }
                     }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    width: '46px',
+                    className: 'text-center',
+                    render: function() {
+                        return '<button class="btn btn-sm btn-outline-primary analyze-btn py-1 px-2" title="AI Analysis"><i class="fa-solid fa-robot fa-sm"></i></button>';
+                    }
                 }
             ]
         });
@@ -365,6 +508,177 @@
         
         // Trigger it once for the initial load
         $('#snpTable').trigger('draw.dt');
+
+        // ── Analyze button ──
+        let currentSnpData = null;
+        let analyzeModalInstance = null;
+
+        $('#snpTable').on('click', '.analyze-btn', function() {
+            currentSnpData = table.row($(this).closest('tr')).data();
+            $('#analyzeSnpId').text(currentSnpData.SNP);
+            $('#analyzeSnpMeta').text(
+                currentSnpData.Gene + ' · Chr ' + currentSnpData.Chromosome +
+                ' · Your allele: ' + currentSnpData.Processed_Allele +
+                ' · Magnitude: ' + currentSnpData.Magnitude
+            );
+            analyzeModalInstance = analyzeModalInstance || new bootstrap.Modal('#analyzeModal');
+            analyzeModalInstance.show();
+            runAnalysis();
+        });
+
+        $('#analyzeRerunBtn').on('click', runAnalysis);
+
+        async function runAnalysis() {
+            if (!currentSnpData) return;
+            $('#analyzeContent').text('');
+            $('#analyzeError').hide();
+            $('#analyzeLoading').show();
+            $('#analyzeRerunBtn').prop('disabled', true);
+
+            try {
+                const resp = await fetch('/api/analyze-snp', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({snp: currentSnpData, model: $('#analyzeModel').val()})
+                });
+                $('#analyzeLoading').hide();
+
+                const reader = resp.body.getReader();
+                const dec = new TextDecoder();
+                let buf = '', text = '';
+
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    buf += dec.decode(value, {stream: true});
+                    const lines = buf.split('\n'); buf = lines.pop();
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        try {
+                            const d = JSON.parse(line.slice(6));
+                            if (d.token) { text += d.token; $('#analyzeContent').text(text); }
+                            if (d.error) { $('#analyzeError').show().text(d.error); }
+                        } catch(e) {}
+                    }
+                }
+            } catch(e) {
+                $('#analyzeLoading').hide();
+                $('#analyzeError').show().text('Could not connect to Ollama. Make sure it is running on port 11434.');
+            } finally {
+                $('#analyzeLoading').hide();
+                $('#analyzeRerunBtn').prop('disabled', false);
+            }
+        }
+
+        // ── Chat widget ──
+        let chatOpen = false;
+        const chatHistory = [];
+
+        $('#chatToggleBtn').on('click', function() {
+            chatOpen = !chatOpen;
+            if (chatOpen) {
+                $('#chatPanel').css('display', 'flex');
+                $('#chatInput').focus();
+            } else {
+                $('#chatPanel').hide();
+            }
+            $('#chatIcon').toggleClass('fa-comments', !chatOpen).toggleClass('fa-xmark', chatOpen);
+        });
+
+        $('#chatClearBtn').on('click', function() {
+            chatHistory.length = 0;
+            $('#chatMessages').empty().append($('#chatEmpty').show());
+        });
+
+        $('#chatSendBtn').on('click', sendChat);
+        $('#chatInput').on('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+        });
+
+        async function sendChat() {
+            const input = $('#chatInput').val().trim();
+            if (!input) return;
+            $('#chatInput').val('');
+            $('#chatEmpty').hide();
+
+            appendBubble('user', input);
+            chatHistory.push({role: 'user', content: input});
+
+            const $typing = $('<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>');
+            $('#chatMessages').append($typing);
+            scrollChat();
+
+            try {
+                const resp = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        messages: chatHistory,
+                        model: $('#chatModel').val(),
+                        genome_summary: genomeSummary
+                    })
+                });
+                $typing.remove();
+
+                let text = '';
+                const $bubble = appendBubble('assistant', '');
+                const reader = resp.body.getReader();
+                const dec = new TextDecoder();
+                let buf = '';
+
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    buf += dec.decode(value, {stream: true});
+                    const lines = buf.split('\n'); buf = lines.pop();
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        try {
+                            const d = JSON.parse(line.slice(6));
+                            if (d.token) { text += d.token; $bubble.text(text); scrollChat(); }
+                            if (d.error) { $bubble.text('Error: ' + d.error); }
+                        } catch(e) {}
+                    }
+                }
+                chatHistory.push({role: 'assistant', content: text});
+            } catch(e) {
+                $typing.remove();
+                appendBubble('assistant', 'Error: could not connect to Ollama.');
+            }
+        }
+
+        function appendBubble(role, text) {
+            const $b = $('<div class="chat-bubble"></div>').addClass(role).text(text);
+            $('#chatMessages').append($b);
+            scrollChat();
+            return $b;
+        }
+
+        function scrollChat() {
+            const el = document.getElementById('chatMessages');
+            el.scrollTop = el.scrollHeight;
+        }
+
+        // ── Ollama status ──
+        async function checkOllamaStatus() {
+            try {
+                const data = await fetch('/api/ollama-status').then(r => r.json());
+                const models = data.models || [];
+                if (data.available && models.length > 0) {
+                    const opts = models.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+                    $('#analyzeModel, #chatModel').html(opts);
+                    $('#chatToggleBtn').removeClass('offline').attr('title', 'Genome Assistant (Ollama)');
+                } else {
+                    const msg = data.available ? 'No models installed in Ollama' : 'Ollama not running';
+                    $('#chatToggleBtn').addClass('offline').attr('title', msg);
+                    $('#analyzeModel, #chatModel').html('<option>— Ollama offline —</option>');
+                }
+            } catch(e) {
+                $('#chatToggleBtn').addClass('offline').attr('title', 'Ollama not running');
+            }
+        }
+
+        checkOllamaStatus();
     });
 </script>
 

@@ -1,8 +1,14 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, jsonify, request, Response, stream_with_context
 import json
 import os
 import threading
 import time
+
+try:
+    import requests as _req
+    _REQUESTS_OK = True
+except ImportError:
+    _REQUESTS_OK = False
 
 app = Flask(__name__)
 
@@ -10,6 +16,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 _DB_FILE  = os.path.join(BASE_DIR, 'detailed_snps.json')
 _CAT_FILE = os.path.join(BASE_DIR, 'category_snps.jsonl')
+
+OLLAMA_BASE = os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')
 
 
 def format_user_allele(allele_string, orientation):
@@ -181,7 +189,124 @@ def index():
     _refresh_cache()
     user_file = os.path.join(BASE_DIR, 'snpDict.json')
     report_data = cross_reference_snps(user_file)
-    return render_template('index.html', report_data=report_data)
+
+    genome_summary = [
+        {
+            'SNP': r['SNP'], 'Gene': r['Gene'],
+            'Allele': r['Processed_Allele'], 'Magnitude': r['Magnitude'],
+            'Summary': r['Summary'], 'Categories': r['Categories']
+        }
+        for r in report_data[:25]
+        if r.get('Summary') and r['Summary'] != 'No general summary available.'
+    ]
+
+    return render_template('index.html', report_data=report_data, genome_summary=genome_summary)
+
+
+@app.route('/api/ollama-status')
+def ollama_status():
+    if not _REQUESTS_OK:
+        return jsonify({'available': False, 'models': [], 'error': 'requests library not installed'})
+    try:
+        resp = _req.get(f'{OLLAMA_BASE}/api/tags', timeout=3)
+        models = [m['name'] for m in resp.json().get('models', [])]
+        return jsonify({'available': True, 'models': models})
+    except Exception:
+        return jsonify({'available': False, 'models': []})
+
+
+@app.route('/api/analyze-snp', methods=['POST'])
+def analyze_snp():
+    if not _REQUESTS_OK:
+        return jsonify({'error': 'requests library not installed — run: pip install requests'}), 500
+    data = request.json
+    snp  = data.get('snp', {})
+    model = data.get('model', '')
+
+    prompt = (
+        "Analyze this genetic variant from a 23andMe report:\n\n"
+        f"SNP ID: {snp.get('SNP', 'Unknown')}\n"
+        f"Gene: {snp.get('Gene', 'Unknown')}\n"
+        f"Chromosome: {snp.get('Chromosome', 'Unknown')}\n"
+        f"Your allele: {snp.get('Processed_Allele', 'Unknown')}\n"
+        f"SNPedia magnitude: {snp.get('Magnitude', '0')} (0=benign, 1=interesting, 2=moderate, 3+=significant)\n"
+        f"Trait summary: {snp.get('Summary', 'None')}\n"
+        f"Disease categories: {', '.join(snp.get('Categories', [])) or 'Unclassified'}\n\n"
+        "Please explain in plain language:\n"
+        "1. What this gene does in the body\n"
+        "2. What this specific allele means for this individual\n"
+        "3. Any relevant lifestyle or health considerations\n"
+        "4. Important caveats about interpreting genetic testing\n\n"
+        "Be factual, accessible, and non-alarmist. Always recommend consulting a healthcare provider for medical decisions."
+    )
+
+    def generate():
+        try:
+            resp = _req.post(f'{OLLAMA_BASE}/api/generate',
+                             json={'model': model, 'prompt': prompt, 'stream': True},
+                             stream=True, timeout=120)
+            for line in resp.iter_lines():
+                if line:
+                    chunk = json.loads(line)
+                    token = chunk.get('response', '')
+                    if token:
+                        yield f"data: {json.dumps({'token': token})}\n\n"
+                    if chunk.get('done'):
+                        yield f"data: {json.dumps({'done': True})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return Response(stream_with_context(generate()), mimetype='text/event-stream',
+                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
+
+@app.route('/api/chat', methods=['POST'])
+def ollama_chat():
+    if not _REQUESTS_OK:
+        return jsonify({'error': 'requests library not installed — run: pip install requests'}), 500
+    data     = request.json
+    messages = data.get('messages', [])
+    model    = data.get('model', '')
+    summary  = data.get('genome_summary', [])
+
+    context = '\n'.join(
+        f"- {s['SNP']} ({s['Gene']}): allele {s['Allele']}, magnitude {s['Magnitude']}, "
+        f"categories: {', '.join(s.get('Categories', []))}, trait: {s['Summary']}"
+        for s in summary
+    ) or 'No significant variants loaded yet.'
+
+    system_msg = {
+        'role': 'system',
+        'content': (
+            "You are a genomics assistant helping a user understand their personal 23andMe DNA data.\n\n"
+            f"Their top genetic variants by significance:\n{context}\n\n"
+            "Guidelines:\n"
+            "- Explain genetics in plain, non-alarmist language\n"
+            "- Always recommend a healthcare provider for medical decisions\n"
+            "- Acknowledge DTC testing limitations (false positives, incomplete coverage)\n"
+            "- Reference the user's specific SNPs when relevant\n"
+            "- Be concise but thorough"
+        )
+    }
+
+    def generate():
+        try:
+            resp = _req.post(f'{OLLAMA_BASE}/api/chat',
+                             json={'model': model, 'messages': [system_msg] + messages, 'stream': True},
+                             stream=True, timeout=120)
+            for line in resp.iter_lines():
+                if line:
+                    chunk = json.loads(line)
+                    token = chunk.get('message', {}).get('content', '')
+                    if token:
+                        yield f"data: {json.dumps({'token': token})}\n\n"
+                    if chunk.get('done'):
+                        yield f"data: {json.dumps({'done': True})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return Response(stream_with_context(generate()), mimetype='text/event-stream',
+                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 
 if __name__ == '__main__':
