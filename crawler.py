@@ -4,6 +4,30 @@ import json
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+
+
+class FetchError(Exception):
+    """Raised when an HTTP/network fetch fails after all retries. Transient and
+    retryable, as opposed to a genuine 'page does not exist' result."""
+
+
+def _fetch_json(url, label, retries=5, delay=10):
+    """GET a URL and return the parsed JSON, retrying transient failures.
+    Raises FetchError if every attempt fails."""
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Python native scraper)'})
+    last_error = None
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(req) as response:
+                return json.loads(response.read().decode('utf-8'))
+        except Exception as e:
+            last_error = e
+            if attempt < retries - 1:
+                print(f"  -> {label} fetch failed ({e}), retrying in {delay}s... "
+                      f"(attempt {attempt + 2}/{retries})")
+                time.sleep(delay)
+    raise FetchError(f"{label} fetch failed after {retries} attempts: {last_error}")
 
 
 def get_json_keys(filepath):
@@ -24,43 +48,16 @@ def get_json_keys(filepath):
         return []
 
 
-def convert_jsonl_to_json(input_file, output_file):
-    print("Reading JSON Lines file...")
-    data = []
-    with open(input_file, 'r') as f:
-        for line in f:
-            if line.strip():
-                data.append(json.loads(line))
-    print("Converting to standard JSON array...")
-    with open(output_file, 'w') as f:
-        json.dump(data, f, indent=4)
-    print(f"Done! Saved standard JSON to {output_file}")
-
-
 def get_genotype_data(snp_title):
     """Fetches all genotype sub-pages for a given SNP in a single API call using the bots URL."""
     prefix = urllib.parse.quote(f"{snp_title}(")
     url = f"https://bots.snpedia.com/api.php?action=query&generator=allpages&gapprefix={prefix}&prop=revisions&rvprop=content&rvslots=main&format=json"
 
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Python native scraper)'})
-
     genotypes = []
-    for attempt in range(5):
-        try:
-            with urllib.request.urlopen(req) as response:
-                data = json.loads(response.read().decode('utf-8'))
-            break
-        except Exception as e:
-            if attempt < 4:
-                print(f"  -> Genotype fetch failed for {snp_title} ({e}), retrying in 10s...")
-                time.sleep(10)
-            else:
-                print(f"  -> Giving up on genotypes for {snp_title} after 5 attempts: {e}")
-                return genotypes
-
+    data = _fetch_json(url, f"genotypes for {snp_title}")
     pages = data.get('query', {}).get('pages', {})
 
-    for page_id, page_info in pages.items():
+    for page_info in pages.values():
         title = page_info.get('title', '')
 
         allele_match = re.search(r'(\([A-Z,-]+;[A-Z,-]+\))', title, re.IGNORECASE)
@@ -86,22 +83,7 @@ def get_snp_data(snp_name):
     safe_title = urllib.parse.quote(snp_name)
     url = f"https://bots.snpedia.com/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&titles={safe_title}&redirects=1&format=json"
 
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Python native scraper)'})
-
-    data = None
-    for attempt in range(5):
-        try:
-            with urllib.request.urlopen(req) as response:
-                data = json.loads(response.read().decode('utf-8'))
-            break
-        except Exception as e:
-            if attempt < 4:
-                print(f"  -> Fetch failed for {snp_name} ({e}), retrying in 10s...")
-                time.sleep(10)
-            else:
-                print(f"  -> Giving up on {snp_name} after 5 attempts: {e}")
-                return None
-
+    data = _fetch_json(url, snp_name)
     pages = data.get('query', {}).get('pages', {})
 
     for page_id, page_info in pages.items():
@@ -148,28 +130,11 @@ def fetch_snpedia_snp_list(cache_file='snpedia_snps.json'):
     cmcontinue = None
     page = 0
 
-    max_retries = 5
-    retry_delay = 10  # seconds
-
     while True:
         base = "https://bots.snpedia.com/api.php?action=query&list=categorymembers&cmtitle=Category:Is_a_snp&cmlimit=500&format=json"
         url = base + (f"&cmcontinue={urllib.parse.quote(cmcontinue)}" if cmcontinue else "")
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Python native scraper)'})
 
-        data = None
-        for attempt in range(max_retries):
-            try:
-                with urllib.request.urlopen(req) as response:
-                    data = json.loads(response.read().decode('utf-8'))
-                break
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    print(f"\n  Page {page + 1} failed ({e}), retrying in {retry_delay}s... "
-                          f"(attempt {attempt + 2}/{max_retries})")
-                    time.sleep(retry_delay)
-                else:
-                    print(f"\nFailed after {max_retries} attempts on page {page + 1}: {e}")
-                    raise
+        data = _fetch_json(url, f"SNP list page {page + 1}")
 
         for item in data.get('query', {}).get('categorymembers', []):
             snps.add(item['title'].lower())
@@ -258,7 +223,26 @@ if __name__ == "__main__":
         dest='refresh_snplist',
         help='Re-fetch the SNPedia SNP list even if a local cache exists.'
     )
+    parser.add_argument(
+        '-w', '--workers',
+        type=int,
+        default=3,
+        help='Number of SNPs to fetch concurrently (default 3). Use 1 for the '
+             'original sequential behaviour. Keep this modest to be respectful '
+             'to SNPedia.'
+    )
+    parser.add_argument(
+        '--delay',
+        type=float,
+        default=0.5,
+        help='Seconds each worker pauses after finishing a SNP (default 0.5). '
+             'Throttles the request rate; lower is faster but less polite.'
+    )
     args = parser.parse_args()
+
+    if args.workers < 1:
+        print("--workers must be at least 1. Exiting.")
+        raise SystemExit(1)
 
     filename        = 'snpDict.json'
     output_filename = 'detailed_snps.json'
@@ -286,14 +270,20 @@ if __name__ == "__main__":
     # Load every SNP that was ever attempted (success, not_found, skipped)
     progress = _load_progress(progress_file)
 
-    # Build the skip set: exclude 'skipped' entries when --crawl-skipped is active
+    # 'error' entries are transient fetch failures — always retry them.
+    # Build the skip set: exclude 'skipped' entries when --crawl-skipped is active.
     if args.crawl_skipped:
-        already_scanned = {rsid for rsid, status in progress.items() if status != 'skipped'}
+        already_scanned = {rsid for rsid, status in progress.items()
+                           if status not in ('skipped', 'error')}
         skipped_count = sum(1 for s in progress.values() if s == 'skipped')
         if skipped_count:
             print(f"--crawl-skipped: will re-crawl {skipped_count:,} previously skipped SNPs.")
     else:
-        already_scanned = set(progress.keys())
+        already_scanned = {rsid for rsid, status in progress.items() if status != 'error'}
+
+    error_count = sum(1 for s in progress.values() if s == 'error')
+    if error_count:
+        print(f"Found {error_count:,} SNPs that previously failed with a transient error — will retry them.")
 
     if already_scanned:
         print(f"Found {len(already_scanned):,} already-scanned SNPs in progress file — will skip them.")
@@ -321,35 +311,90 @@ if __name__ == "__main__":
                     already_scanned.add(s.lower())
         print(f"Starting from '{target_snps[start_index]}' (index {start_index}).")
 
-    # Load SNPs already written to the output file (guards against duplicate entries)
+    # Load SNPs already written to the output file. Anything already in the
+    # output is, by definition, already fetched — skip it so we never re-download
+    # data we hold (e.g. the shipped starter dataset has no progress entries).
     already_written = _load_written(output_filename)
     if already_written:
-        print(f"Found {len(already_written):,} SNPs already in output file.")
+        new_from_output = already_written - already_scanned
+        already_scanned |= already_written
+        print(f"Found {len(already_written):,} SNPs already in output file "
+              f"({len(new_from_output):,} not in progress log — skipping those too).")
 
     total = len(target_snps)
     remaining_count = sum(1 for s in target_snps if s.lower() not in already_scanned)
     print(f"Scanning {remaining_count:,} SNPs (of {total:,} total)...\n")
 
-    with open(output_filename, 'a') as out_f, open(progress_file, 'a') as prog_f:
-        for idx, snp in enumerate(target_snps, 1):
-            if snp.lower() in already_scanned:
-                continue
+    # The remaining work, in order. Each worker thread only does network I/O;
+    # all file writes happen on the main thread below, so no locking is needed.
+    remaining = [s for s in target_snps if s.lower() not in already_scanned]
 
-            print(f"[{idx}/{total}] Checking {snp}...")
-
+    def fetch_one(snp):
+        """Runs in a worker thread. Never raises — returns (snp, status, data)."""
+        try:
             data = get_snp_data(snp)
-
-            # Record every attempt in the progress file, regardless of outcome
             status = 'success' if data else 'not_found'
-            prog_f.write(json.dumps({'snp': snp.lower(), 'status': status}) + '\n')
-            prog_f.flush()
-            already_scanned.add(snp.lower())
+        except FetchError as e:
+            print(f"  -> {e}")
+            data, status = None, 'error'
+        if args.delay > 0:
+            time.sleep(args.delay)
+        return snp, status, data
 
-            if data and snp.lower() not in already_written:
-                out_f.write(json.dumps(data) + '\n')
-                out_f.flush()
-                already_written.add(snp.lower())
+    # Abort the run if the server keeps failing — entries are marked 'error'
+    # (retryable), so a later run resumes them once the server recovers.
+    max_consecutive_errors = 10
+    consecutive_errors = 0
+    completed = 0
+    stop = False
 
-            time.sleep(1)
+    with open(output_filename, 'a') as out_f, open(progress_file, 'a') as prog_f, \
+            ThreadPoolExecutor(max_workers=args.workers) as executor:
+        work = iter(remaining)
+
+        def submit_next():
+            snp = next(work, None)
+            return executor.submit(fetch_one, snp) if snp is not None else None
+
+        # Prime the pool with up to `workers` in-flight fetches.
+        inflight = set()
+        for _ in range(args.workers):
+            fut = submit_next()
+            if fut is None:
+                break
+            inflight.add(fut)
+
+        while inflight:
+            done, inflight = wait(inflight, return_when=FIRST_COMPLETED)
+            for fut in done:
+                snp, status, data = fut.result()
+                completed += 1
+
+                prog_f.write(json.dumps({'snp': snp.lower(), 'status': status}) + '\n')
+                prog_f.flush()
+                already_scanned.add(snp.lower())
+
+                if data and snp.lower() not in already_written:
+                    out_f.write(json.dumps(data) + '\n')
+                    out_f.flush()
+                    already_written.add(snp.lower())
+
+                print(f"[{completed}/{len(remaining)}] {snp} -> {status}")
+
+                if status == 'error':
+                    consecutive_errors += 1
+                    if consecutive_errors >= max_consecutive_errors and not stop:
+                        stop = True
+                        print(f"\nAborting: {consecutive_errors} consecutive fetch "
+                              f"failures — SNPedia looks down. Progress is saved; "
+                              f"re-run later to resume.")
+                else:
+                    consecutive_errors = 0
+
+                # Keep the pool topped up until we stop or run out of work.
+                if not stop:
+                    fut = submit_next()
+                    if fut is not None:
+                        inflight.add(fut)
 
     print(f"\nFinished! Data saved to {output_filename}")

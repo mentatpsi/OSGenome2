@@ -1,3 +1,9 @@
 snpDict.json
+snpDict_*.json
+*.vcf.gz
+*.vcf.gz.tbi
+*.crai
 *.txt
 .DS_Store
+__pycache__/
+crawl_progress.jsonl

@@ -27,9 +27,10 @@ From Bioinformatics - A Practical Approach by Shui Qing Ye, M.D., Ph.D. (pg 108)
 ```
 OSGenome2/
 ├── app.py                 # Flask application & SNP cross-referencing logic
-├── crawler.py             # SNPedia web crawler
-├── GenomeImporter.py      # 23AndMe Genome Importer
-├── snpDict.json          # Your 23AndMe SNP data (Genome Importer Generated)
+├── crawler.py             # SNPedia web crawler (parallel, resumable)
+├── GenomeImporter.py      # Importer for 23andMe / AncestryDNA raw text files
+├── NebulaImporter.py      # Importer for Nebula / whole-genome VCF files
+├── snpDict.json          # Your SNP data (importer-generated)
 ├── category_snps.jsonl   # Claude-curated category tags (JSONL format)
 ├── detailed_snps.json    # SNPedia data — starter dataset included (see below)
 ├── snpedia_snps.json     # Cached list of all SNPedia rsIDs — included
@@ -79,22 +80,22 @@ For complete coverage of every SNP in your specific genome:
 1. Delete `detailed_snps.json`
 2. Run `python crawler.py`
 
-The crawler queries SNPedia for each rsID in your `snpDict.json` at one request per second (to be respectful to SNPedia's servers). A full 23andMe genome contains ~600,000 SNPs, though SNPedia only has meaningful data for a fraction of them. **Expect the crawl to run for several hours.** The app can be used at any point during the crawl, it reloads new results automatically as the file grows.
+The crawler queries SNPedia for each rsID in your `snpDict.json`, fetching a few in parallel by default (tune with `--workers` / `--delay`, see below). A full genome contains ~600,000 SNPs, though SNPedia only has meaningful data for a fraction of them. **Expect the crawl to run for a while.** The app can be used at any point during the crawl, it reloads new results automatically as the file grows.
 
 ---
 
 ## How to Use
 
-### Step 1: Import Your 23AndMe Raw Data
+### Step 1: Import Your Raw DNA Data
 
-Use `GenomeImporter.py` to convert your raw 23AndMe DNA text file into the required SNP dictionary format.
+Use `GenomeImporter.py` to convert a raw **23andMe** or **AncestryDNA** text file into the required SNP dictionary format. The column layout is auto-detected, so both formats work (23andMe joins the genotype in one column; AncestryDNA splits the two alleles across two columns).
 
 ```bash
-python GenomeImporter.py -f <path_to_23andme_file.txt> -o snpDict.json
+python GenomeImporter.py -f <path_to_raw_file.txt> -o snpDict.json
 ```
 
 **What happens:**
-1. Reads your raw 23AndMe text file line-by-line
+1. Reads your raw text file line-by-line
 2. Extracts SNP IDs (rsids) and genotypes
 3. Formats genotypes to SNPedia standard: `(A;G)` syntax
 4. Exports the processed data to `snpDict.json`
@@ -106,6 +107,22 @@ python GenomeImporter.py -f <path_to_23andme_file.txt> -o snpDict.json
   "rs1815739": "(C;T)",
   "rs6152": "(A;G)"
 }
+```
+
+#### Whole-Genome Sequencing (Nebula / VCF)
+
+If you have whole-genome sequencing data as a VCF (e.g. from Nebula Genomics), use `NebulaImporter.py` instead. It reads a single-sample VCF (plain or `.vcf.gz`) and emits the same `snpDict.json` format. Only SNVs with an rsID are kept; indels are skipped.
+
+```bash
+python NebulaImporter.py -f <path_to.vcf.gz> -o snpDict.json
+```
+
+A variant-only VCF lists only sites that differ from the reference, so homozygous-reference SNPs are absent. To fill those in from an array export, pass `--backfill` (the VCF call wins on any overlap):
+
+```bash
+# First build an array snpDict, then merge the WGS calls on top of it
+python GenomeImporter.py -f AncestryDNA.txt -o snpDict_array.json
+python NebulaImporter.py -f sample.vcf.gz -o snpDict.json --backfill snpDict_array.json
 ```
 
 ### Step 2 (Optional): Run the Crawler for Full Coverage
@@ -137,6 +154,8 @@ python crawler.py          # resumes automatically from crawl_progress.jsonl
 
 | Flag | Description |
 |------|-------------|
+| `-w` / `--workers <n>` | Number of SNPs to fetch concurrently (default `3`). Use `1` for sequential behaviour. Keep modest to be respectful to SNPedia. |
+| `--delay <seconds>` | Seconds each worker pauses after finishing a SNP (default `0.5`). Throttles the request rate. |
 | `-s` / `--start <rsID\|index>` | Skip all SNPs before this point and mark them as `skipped` in the progress file. Accepts an rsID (e.g. `rs53576`) or a zero-based numeric index. |
 | `--crawl-skipped` | Re-crawl SNPs previously marked as `skipped` via `--start`, while still skipping anything already successfully crawled or confirmed missing. |
 | `--reset` | Clear the progress file entirely and start the crawl from scratch. |
@@ -210,9 +229,10 @@ The crawler maintains a JSONL progress file alongside `detailed_snps.json`. Each
 |--------|---------|
 | `success` | SNPedia returned data; written to `detailed_snps.json` |
 | `not_found` | SNP has no SNPedia page |
+| `error` | Transient fetch failure (e.g. HTTP 502/timeout) after all retries; retried automatically on the next run |
 | `skipped` | Skipped via `--start`; can be re-crawled with `--crawl-skipped` |
 
-Re-running the crawler always skips `success` and `not_found` entries. Only `skipped` entries can be selectively resumed.
+Re-running the crawler skips `success` and `not_found` entries, and also skips any SNP already present in `detailed_snps.json` (so a shipped or partial dataset is never re-fetched). `error` entries are always retried; only `skipped` entries are resumed selectively with `--crawl-skipped`. You can interrupt the crawl at any time with `Ctrl+C` — completed SNPs are flushed to disk as they finish, so a re-run continues from where it left off. If SNPedia returns repeated errors (e.g. an outage), the crawler aborts after 10 consecutive failures with progress saved.
 
 ## AI Analysis (Ollama)
 
