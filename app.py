@@ -219,7 +219,7 @@ def ollama_status():
 def analyze_snp():
     if not _REQUESTS_OK:
         return jsonify({'error': 'requests library not installed — run: pip install requests'}), 500
-    data = request.json
+    data = request.get_json(silent=True) or {}
     snp  = data.get('snp', {})
     model = data.get('model', '')
 
@@ -264,7 +264,7 @@ def analyze_snp():
 def ollama_chat():
     if not _REQUESTS_OK:
         return jsonify({'error': 'requests library not installed — run: pip install requests'}), 500
-    data     = request.json
+    data     = request.get_json(silent=True) or {}
     messages = data.get('messages', [])
     model    = data.get('model', '')
     summary  = data.get('genome_summary', [])
@@ -310,4 +310,7 @@ def ollama_chat():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Debug is opt-in via FLASK_DEBUG to avoid exposing the Werkzeug
+    # interactive debugger (arbitrary code execution) by default.
+    debug_enabled = os.environ.get('FLASK_DEBUG', '').lower() in ('1', 'true', 'yes', 'on')
+    app.run(debug=debug_enabled)
