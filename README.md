@@ -44,10 +44,16 @@ OSGenome2/
 
 ### Prerequisites
 
-- Python 3.7 or higher
+- Python 3.10 or higher (the app uses `X | None` type-union syntax)
 - pip (Python package manager)
 
 ### Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+This installs the pinned versions of Flask and requests. To install manually instead:
 
 ```bash
 pip install flask requests
@@ -85,19 +91,29 @@ The crawler queries SNPedia for each rsID in your `snpDict.json` at one request 
 
 ## How to Use
 
-### Step 1: Import Your 23AndMe Raw Data
+### Step 1: Import Your Raw DNA Data
 
-Use `GenomeImporter.py` to convert your raw 23AndMe DNA text file into the required SNP dictionary format.
+Use `GenomeImporter.py` to convert your raw DNA text file into the required SNP dictionary format. The importer auto-detects the provider format, so the same command works for all supported files:
+
+| Provider | Delimiter | Genotype layout |
+|----------|-----------|-----------------|
+| 23andMe | Tab | Combined genotype column (`AG`) |
+| AncestryDNA | Tab | Two separate allele columns (`A` `G`) |
+| MyHeritage / FamilyTreeDNA | Comma | Two separate allele columns (`A` `G`) |
 
 ```bash
-python GenomeImporter.py -f <path_to_23andme_file.txt> -o snpDict.json
+python GenomeImporter.py -f <path_to_raw_data_file.txt> -o snpDict.json
 ```
 
 **What happens:**
-1. Reads your raw 23AndMe text file line-by-line
-2. Extracts SNP IDs (rsids) and genotypes
-3. Formats genotypes to SNPedia standard: `(A;G)` syntax
-4. Exports the processed data to `snpDict.json`
+1. Reads your raw DNA text file line-by-line
+2. Auto-detects the delimiter (tab vs comma) and column layout (combined vs split alleles)
+3. Extracts SNP IDs (rsids) and genotypes
+4. Validates each allele against `{A, T, C, G, -, I, D}`, collapsing unrecognized or missing calls to a no-call `(-;-)`
+5. Formats genotypes to SNPedia standard: `(A;G)` syntax
+6. Exports the processed data to `snpDict.json`
+
+> **Ancestry orientation note:** AncestryDNA reports on the plus strand. When a SNPedia entry uses `minus` orientation, the app flips your alleles automatically at display time (see `format_user_allele` in `app.py`), so no manual conversion is needed.
 
 **Expected output format:**
 ```json
